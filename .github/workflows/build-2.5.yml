@@ -7,7 +7,6 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_NET_GIT_FETCH_WITH_CLI: true
   RED4EXT_RS_REV: d419d98d8b81a19a62585d11759fabdeabeb0957
-  RED4EXT_SDK_REV: 0f5eba42a4cf3a1161ad3de0b4ed6f1901ec169e
 
 jobs:
   build:
@@ -16,6 +15,9 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Keep line endings as-is
+        run: git config --global core.autocrlf false
+
       - name: Checkout Audioware
         uses: actions/checkout@v4
         with:
@@ -29,12 +31,12 @@ jobs:
           path: red4ext-rs
           submodules: recursive
 
-      - name: Bump RED4ext.SDK to the 2.5-compatible commit
+      - name: Backport 2.5 changes onto the SDK that red4ext-rs expects
         run: |
           cd red4ext-rs/deps/RED4ext.SDK
-          git fetch origin master
-          git checkout "$RED4EXT_SDK_REV"
           git log --oneline -1
+          git apply --ignore-whitespace "$GITHUB_WORKSPACE/sdk-2.5.patch"
+          git diff --stat | tail -3
 
       - name: Enlarge callback buffer (32 -> 64 bytes)
         run: |
