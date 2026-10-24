@@ -1,0 +1,67 @@
+name: Build Audioware for CP2077 2.5 (unofficial)
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+  RED4EXT_RS_REV: d419d98d8b81a19a62585d11759fabdeabeb0957
+  RED4EXT_SDK_REV: 0f5eba42a4cf3a1161ad3de0b4ed6f1901ec169e
+
+jobs:
+  build:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout Audioware
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Checkout red4ext-rs
+        uses: actions/checkout@v4
+        with:
+          repository: jac3km4/red4ext-rs
+          ref: ${{ env.RED4EXT_RS_REV }}
+          path: red4ext-rs
+          submodules: recursive
+
+      - name: Bump RED4ext.SDK to the 2.5-compatible commit
+        run: |
+          cd red4ext-rs/deps/RED4ext.SDK
+          git fetch origin master
+          git checkout "$RED4EXT_SDK_REV"
+          git log --oneline -1
+
+      - name: Enlarge callback buffer (32 -> 64 bytes)
+        run: |
+          f=red4ext-rs/src/types/callback.rs
+          sed -i 's/\[u8; 0x20\]/[u8; 0x40]/; s/\[0u8; 0x20\]/[0u8; 0x40]/' "$f"
+          grep -n "0x40" "$f"
+
+      - name: Point Audioware at the patched red4ext-rs
+        run: |
+          sed -i 's|^red4ext-rs = .*|red4ext-rs = { path = "red4ext-rs" }|' Cargo.toml
+          grep -n "^red4ext-rs" Cargo.toml
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build
+        run: cargo build --release -p audioware
+
+      - name: Collect output
+        run: |
+          mkdir -p out
+          cp target/release/audioware.dll out/
+          cp target/release/audioware.pdb out/ || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audioware-2.5-unofficial
+          path: out/
